@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Abhi's Minimal Calendar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      background: #f9f9f9;
+      font-family: 'Inconsolata', monospace;
+    }
+
+    * {
+      font-family: 'Inconsolata', monospace;
+      box-sizing: border-box;
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: 60px repeat(7, 1fr);
+      grid-template-rows: 40px repeat(24, 35px);
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      margin: 20px auto;
+      width: 99vw;
+      max-width: 1500px;
+      background: #fff;
+      position: relative;
+    }
+
+    .corner {
+      grid-column: 1;
+      grid-row: 1;
+      background: #eee;
+    }
+
+    .day-label {
+      grid-row: 1;
+      text-align: center;
+      line-height: 40px;
+      font-weight: bold;
+      background: #ddd;
+      border-right: 1px solid #bbb;
+      user-select: none;
+    }
+
+    .time-label {
+      grid-column: 1;
+      text-align: right;
+      padding-right: 5px;
+      font-size: 13px;
+      border-top: 1px dotted #999;
+      line-height: 35px;
+      user-select: none;
+      color: #555;
+    }
+
+    .cell {
+      border-top: 1px dotted #ccc;
+      border-right: 1px solid #eee;
+      position: relative;
+    }
+
+    .event {
+      position: absolute;
+      background: #111;
+      color: white;
+      font-size: 12px;
+      padding: 4px 6px;
+      white-space: pre-line;
+      border-radius: 2px;
+      line-height: 1.2;
+      z-index: 10;
+      cursor: pointer;
+    }
+
+    .add-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #111;
+      color: #fff;
+      font-size: 24px;
+      border: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    .modal, .delete-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border: 2px solid #111;
+      padding: 20px;
+      z-index: 2000;
+      display: none;
+      width: 260px;
+    }
+
+    .modal select,
+    .modal input {
+      width: 100%;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .modal button, .delete-modal button {
+      background: #111;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      margin-right: 10px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .delete-modal p {
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      font-size: 12px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="calendar" id="calendar">
+    <div class="corner"></div>
+    <!-- Day labels (Mon–Sun) -->
+    <div class="day-label" style="grid-column:2">Mon</div>
+    <div class="day-label" style="grid-column:3">Tue</div>
+    <div class="day-label" style="grid-column:4">Wed</div>
+    <div class="day-label" style="grid-column:5">Thu</div>
+    <div class="day-label" style="grid-column:6">Fri</div>
+    <div class="day-label" style="grid-column:7">Sat</div>
+    <div class="day-label" style="grid-column:8">Sun</div>
+  </div>
+
+  <button class="add-button" onclick="showModal()">+</button>
+
+  <div class="modal" id="modal">
+    <label for="day">Day:</label>
+    <select id="day">
+      <option value="0">Mon</option>
+      <option value="1">Tue</option>
+      <option value="2">Wed</option>
+      <option value="3">Thu</option>
+      <option value="4">Fri</option>
+      <option value="5">Sat</option>
+      <option value="6">Sun</option>
+    </select>
+
+    <label for="start">Start Time:</label>
+    <select id="start"></select>
+
+    <label for="end">End Time:</label>
+    <select id="end"></select>
+
+    <label for="title">Event Title:</label>
+    <input type="text" id="title" placeholder="Event title..." />
+
+    <button onclick="addEvent()">Add</button>
+    <button onclick="closeModal()">Cancel</button>
+  </div>
+
+  <div class="delete-modal" id="deleteModal">
+    <p>Delete this event?</p>
+    <button onclick="confirmDelete()">Yes</button>
+    <button onclick="cancelDelete()">No</button>
+  </div>
+
+  <div class="footer">© Abhi 2025</div>
+
+  <script>
+    const calendar = document.getElementById('calendar');
+    const modal = document.getElementById('modal');
+    const deleteModal = document.getElementById('deleteModal');
+    const daySelect = document.getElementById('day');
+    const startSelect = document.getElementById('start');
+    const endSelect = document.getElementById('end');
+    let eventToDelete = null;
+
+    // Time labels
+    for (let h = 0; h < 24; h++) {
+      const hour12 = h % 12 === 0 ? 12 : h % 12;
+      const suffix = h < 12 ? 'am' : 'pm';
+      const label = document.createElement('div');
+      label.className = 'time-label';
+      label.textContent = `${hour12}:00${suffix}`;
+      label.style.gridRow = h + 2;
+      label.style.gridColumn = 1;
+      calendar.appendChild(label);
+    }
+
+    // Grid cells
+    for (let row = 2; row <= 25; row++) {
+      for (let col = 2; col <= 8; col++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.gridRow = row;
+        cell.style.gridColumn = col;
+        calendar.appendChild(cell);
+      }
+    }
+
+    // Time options
+    for (let i = 0; i < 24; i++) {
+      const hour12 = i % 12 === 0 ? 12 : i % 12;
+      const suffix = i < 12 ? "am" : "pm";
+      const label = `${hour12}:00${suffix}`;
+      startSelect.innerHTML += `<option value="${i}">${label}</option>`;
+      endSelect.innerHTML += `<option value="${i+1}">${label}</option>`;
+    }
+
+    function showModal() {
+      modal.style.display = 'block';
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      document.getElementById('title').value = '';
+    }
+
+    function showDeleteModal(eventDiv) {
+      eventToDelete = eventDiv;
+      deleteModal.style.display = 'block';
+    }
+
+    function confirmDelete() {
+      if (eventToDelete) {
+        eventToDelete.remove();
+        eventToDelete = null;
+      }
+      deleteModal.style.display = 'none';
+    }
+
+    function cancelDelete() {
+      eventToDelete = null;
+      deleteModal.style.display = 'none';
+    }
+
+    function addEvent() {
+      const col = parseInt(daySelect.value);
+      const startHour = parseInt(startSelect.value);
+      const endHour = parseInt(endSelect.value);
+      const title = document.getElementById('title').value.trim();
+
+      if (!title || endHour <= startHour) {
+        alert("Check title and time range.");
+        return;
+      }
+
+      const dayWidth = calendar.clientWidth / 8;
+      const rowHeight = 35;
+      const left = 60 + col * dayWidth;
+      const top = 40 + startHour * rowHeight;
+      const height = (endHour - startHour) * rowHeight;
+
+      const event = document.createElement("div");
+      event.className = "event";
+      event.textContent = title;
+      event.style.left = `${left}px`;
+      event.style.top = `${top}px`;
+      event.style.height = `${height}px`;
+      event.style.width = `calc(100% / 7 - 2px)`;
+
+      event.addEventListener("click", e => {
+        e.stopPropagation();
+        showDeleteModal(event);
+      });
+
+      calendar.appendChild(event);
+      closeModal();
+    }
+  </script>
+</body>
+</html>
