@@ -64,7 +64,6 @@
 
     .event {
       position: absolute;
-      background: #111;
       color: white;
       font-size: 12px;
       padding: 4px 6px;
@@ -100,7 +99,7 @@
       padding: 20px;
       z-index: 2000;
       display: none;
-      width: 260px;
+      width: 280px;
     }
 
     .modal select,
@@ -108,6 +107,12 @@
       width: 100%;
       margin-bottom: 10px;
       font-size: 14px;
+    }
+
+    .modal label {
+      font-weight: bold;
+      margin-top: 8px;
+      display: block;
     }
 
     .modal button, .delete-modal button {
@@ -171,6 +176,9 @@
     <label for="title">Event Title:</label>
     <input type="text" id="title" placeholder="Event title..." />
 
+    <label for="color">Event Color:</label>
+    <input type="color" id="color" value="#111111" />
+
     <button onclick="addEvent()">Add</button>
     <button onclick="closeModal()">Cancel</button>
   </div>
@@ -190,7 +198,11 @@
     const daySelect = document.getElementById('day');
     const startSelect = document.getElementById('start');
     const endSelect = document.getElementById('end');
+    const colorInput = document.getElementById('color');
     let eventToDelete = null;
+
+    // Load events from localStorage or start empty
+    let events = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
 
     // Time labels
     for (let h = 0; h < 24; h++) {
@@ -224,66 +236,120 @@
       endSelect.innerHTML += `<option value="${i+1}">${label}</option>`;
     }
 
+    // Render all saved events on the calendar
+    function renderEvents() {
+      // Remove existing event elements
+      [...calendar.querySelectorAll('.event')].forEach(el => el.remove());
+
+      const dayWidth = calendar.clientWidth / 8;
+      const rowHeight = 35;
+
+      for (const ev of events) {
+        const eventDiv = document.createElement('div');
+        eventDiv.className = 'event';
+        eventDiv.textContent = ev.title;
+
+        const left = 60 + ev.day * dayWidth;
+        const top = 40 + ev.start * rowHeight;
+        const height = (ev.end - ev.start) * rowHeight;
+
+        eventDiv.style.left = `${left}px`;
+        eventDiv.style.top = `${top}px`;
+        eventDiv.style.height = `${height}px`;
+        eventDiv.style.width = `calc(100% / 7 - 2px)`;
+        eventDiv.style.backgroundColor = ev.color || '#111';
+        // Make text white or black based on brightness
+        eventDiv.style.color = getContrastYIQ(ev.color || '#111');
+
+        eventDiv.addEventListener('click', e => {
+          e.stopPropagation();
+          showDeleteModal(eventDiv, ev);
+        });
+
+        calendar.appendChild(eventDiv);
+      }
+    }
+
+    // Utility: decide black or white text based on background color brightness
+    function getContrastYIQ(hexcolor){
+      hexcolor = hexcolor.replace('#', '');
+      const r = parseInt(hexcolor.substr(0,2),16);
+      const g = parseInt(hexcolor.substr(2,2),16);
+      const b = parseInt(hexcolor.substr(4,2),16);
+      const yiq = ((r*299)+(g*587)+(b*114))/1000;
+      return (yiq >= 128) ? '#000' : '#fff';
+    }
+
+    // Show modal and reset inputs
     function showModal() {
       modal.style.display = 'block';
+      document.getElementById('title').value = '';
+      startSelect.value = "8";
+      endSelect.value = "9";
+      daySelect.value = "0";
+      colorInput.value = "#111111";
     }
 
     function closeModal() {
       modal.style.display = 'none';
-      document.getElementById('title').value = '';
     }
 
-    function showDeleteModal(eventDiv) {
-      eventToDelete = eventDiv;
+    // Store which event is being deleted and its data
+    let eventToDeleteDiv = null;
+    let eventToDeleteData = null;
+
+    function showDeleteModal(eventDiv, evData) {
+      eventToDeleteDiv = eventDiv;
+      eventToDeleteData = evData;
       deleteModal.style.display = 'block';
     }
 
     function confirmDelete() {
-      if (eventToDelete) {
-        eventToDelete.remove();
-        eventToDelete = null;
+      if (eventToDeleteData) {
+        // Remove event from events array
+        events = events.filter(ev => ev !== eventToDeleteData);
+        saveEvents();
+        renderEvents();
       }
       deleteModal.style.display = 'none';
+      eventToDeleteDiv = null;
+      eventToDeleteData = null;
     }
 
     function cancelDelete() {
-      eventToDelete = null;
       deleteModal.style.display = 'none';
+      eventToDeleteDiv = null;
+      eventToDeleteData = null;
     }
 
-    function addEvent() {
-      const col = parseInt(daySelect.value);
-      const startHour = parseInt(startSelect.value);
-      const endHour = parseInt(endSelect.value);
-      const title = document.getElementById('title').value.trim();
+    // Save events to localStorage
+    function saveEvents() {
+      localStorage.setItem('calendarEvents', JSON.stringify(events));
+    }
 
-      if (!title || endHour <= startHour) {
+    // Add event from modal form
+    function addEvent() {
+      const day = parseInt(daySelect.value);
+      const start = parseInt(startSelect.value);
+      const end = parseInt(endSelect.value);
+      const title = document.getElementById('title').value.trim();
+      const color = colorInput.value;
+
+      if (!title || end <= start) {
         alert("Check title and time range.");
         return;
       }
 
-      const dayWidth = calendar.clientWidth / 8;
-      const rowHeight = 35;
-      const left = 60 + col * dayWidth;
-      const top = 40 + startHour * rowHeight;
-      const height = (endHour - startHour) * rowHeight;
-
-      const event = document.createElement("div");
-      event.className = "event";
-      event.textContent = title;
-      event.style.left = `${left}px`;
-      event.style.top = `${top}px`;
-      event.style.height = `${height}px`;
-      event.style.width = `calc(100% / 7 - 2px)`;
-
-      event.addEventListener("click", e => {
-        e.stopPropagation();
-        showDeleteModal(event);
-      });
-
-      calendar.appendChild(event);
+      // Add new event
+      events.push({ day, start, end, title, color });
+      saveEvents();
+      renderEvents();
       closeModal();
     }
+
+    // Initialize calendar with events
+    renderEvents();
+
   </script>
 </body>
 </html>
